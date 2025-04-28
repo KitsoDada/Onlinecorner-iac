@@ -24,8 +24,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Bicep
-      uses: azure/setup-bicep@v1
+    
+      
 
     - name: Azure Login
       uses: azure/login@v1
