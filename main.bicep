@@ -5,9 +5,9 @@ param clusterName string = 'aksOnline-cornerCluster'
 param location string = resourceGroup().location
 
 @description('Optional DNS prefix to use with hosted Kubernetes API server FQDN.')
-param dnsPrefix string
+param dnsPrefix string = 'onlinecorner'
 
-@description('Disk size (in GB) to provision for each of the agent pool nodes. This value ranges from 0 to 1023. Specifying 0 will apply the default disk size for that agentVMSize.')
+@description('Disk size (in GB) to provision for each of the agent pool nodes.')
 @minValue(0)
 @maxValue(1023)
 param osDiskSizeGB int = 0
@@ -21,10 +21,10 @@ param agentCount int = 3
 param agentVMSize string = 'standard_d2s_v3'
 
 @description('User name for the Linux Virtual Machines.')
-param linuxAdminUsername string
+param linuxAdminUsername string = 'azureuser'
 
-@description('Configure all linux machines with the SSH RSA public key string. Your key should include three parts, for example \'ssh-rsa AAAAB...snip...UcyupgH azureuser@linuxvm\'')
-param sshRSAPublicKey string
+@description('Configure all linux machines with the SSH RSA public key string.')
+param sshRSAPublicKey string = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...fakeKey...user@domain.com'
 
 @description('The name of virtual network.')
 param vnetName string = 'Online-corner-vnet'
@@ -36,7 +36,7 @@ param publicSubnetName string = 'Online-corner-public-subnet'
 param privateSubnetName string = 'Online-corner-private-subnet'
 
 @description('The name of the Azure Container Registry.')
-param acrName string = 'Online-corneracr${uniqueString(resourceGroup().id)}' // Globally unique name
+param acrName string = 'Online-corneracr${uniqueString(resourceGroup().id)}'
 
 @description('The name of the Application Gateway.')
 param appGatewayName string = 'Online-corner-app-gateway'
@@ -45,36 +45,33 @@ param appGatewayName string = 'Online-corner-app-gateway'
 param appServicePlanName string = 'Online-corner-app-service-plan'
 
 @description('The name of the Web App.')
-param webAppName string = 'Online-corner-webapp${uniqueString(resourceGroup().id)}' // Globally unique name
-
-// @description('Webhook Name.')
-// param webhookName string = 'Online-corner-webhook'
+param webAppName string = 'Online-corner-webapp${uniqueString(resourceGroup().id)}'
 
 @description('The name of the container image.')
-param containerImage string = 'Online-corner-product-service:latest' // Change to your container image name
+param containerImage string = 'Online-corner-product-service:latest'
 
 @description('Client ID of the Service Principal used for AKS.')
 @secure()
-param aksServicePrincipalClientId string 
+param aksServicePrincipalClientId string = 'fake-client-id'
 
 @description('DB connection string.')
-param dbConnection string
+param dbConnection string = 'Server=fakedb;Database=fake;Uid=fake;Pwd=fake;'
 
 @description('DB Host.')
-param dbHost string
+param dbHost string = 'localhost'
 
 @description('DB Port.')
-param dbPort string ='3306'
+param dbPort string = '3306'
 
 @description('DB Name.')
 param dbName string = 'Online-corner'
 
 @description('DB User.')
-param dbUser string
+param dbUser string = 'root'
 
 @description('DB Password.')
 @secure()
-param dbPassword string
+param dbPassword string = 'fake-password'
 
 // Virtual Network
 resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
@@ -108,7 +105,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2021-06-01-preview' = {
   name: acrName
   location: location
   sku: {
-    name: 'Premium' // Premium needed for private link/vnet integration
+    name: 'Premium'
   }
   properties: {
     adminUserEnabled: true
@@ -144,7 +141,7 @@ resource appGatewayPublicIp 'Microsoft.Network/publicIPAddresses@2021-05-01' = {
   name: '${appGatewayName}-ip'
   location: location
   sku: {
-      name: 'Standard'
+    name: 'Standard'
   }
   dependsOn: [
     vnet
@@ -201,7 +198,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
     backendAddressPools: [
       {
         name: 'aksBackendPool'
-        properties: {} // Will be populated after AKS is created
+        properties: {}
       }
     ]
     backendHttpSettingsCollection: [
@@ -249,6 +246,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
   }
 }
 
+// AKS Cluster
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: clusterName
   location: location
@@ -301,12 +299,12 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   }
 }
 
-// App Service 
+// App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   name: appServicePlanName
   location: location
   sku: {
-    name: 'P1v2' // Change if needed
+    name: 'P1v2'
     tier: 'PremiumV2'
   }
   kind: 'linux'
@@ -315,6 +313,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   }
 }
 
+// Web App
 resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   name: webAppName
   location: location
@@ -342,7 +341,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'DOCKER_ENABLE_CI'
-          value: 'true' // Enables Continuous Deployment
+          value: 'true'
         }
         {
           name: 'DB_CONNECTION'
@@ -373,6 +372,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   }
 }
 
+// Outputs
 output controlPlaneFQDN string = aks.properties.fqdn
 output aksClusterName string = aks.name
 output acrName string = acr.name
