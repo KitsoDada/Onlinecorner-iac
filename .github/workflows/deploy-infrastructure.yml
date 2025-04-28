@@ -3,7 +3,7 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths:
+    paths: 
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
@@ -46,10 +46,6 @@ jobs:
       run: |
         az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
 
-    - name: Create Resource Group if not exists
-      run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
-
     - name: Deploy Bicep template
       id: deploy
       uses: azure/arm-deploy@v1
@@ -58,15 +54,6 @@ jobs:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: |
-          dnsPrefix=${{ env.DNS_PREFIX }}
-          location=${{ env.LOCATION }}
-          linuxAdminUsername=${{ secrets.LINUX_ADMIN_USERNAME }}
-          sshRSAPublicKey=${{ secrets.SSH_RSA_PUBLIC_KEY }}
-          dbConnection=${{ secrets.DB_CONNECTION }}
-          dbHost=${{ secrets.DB_HOST }}
-          dbUser=${{ secrets.DB_USER }}
-          dbPassword=${{ secrets.DB_PASSWORD }}
         failOnStdErr: false
 
     - name: Get deployment outputs
