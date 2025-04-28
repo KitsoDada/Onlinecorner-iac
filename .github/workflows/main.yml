@@ -12,12 +12,11 @@ env:
   RESOURCE_GROUP: Online-cornerRG
   LOCATION: eastus
   DNS_PREFIX: onlinecorner
-  ENVIRONMENT: production
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production  # Directly use 'production' instead of env.ENVIRONMENT
+    environment: production
     permissions:
       id-token: write
       contents: read
@@ -26,8 +25,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install Azure CLI
+      run: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
     - name: Install Bicep
-      uses: azure/setup-bicep@v1
+      run: |
+        az bicep install
+        az bicep upgrade
 
     - name: Validate Bicep file
       run: az bicep build --file ./main.bicep
@@ -37,9 +42,9 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Create Resource Group if not exists
+    - name: Check if Resource Group exists
       run: |
-        az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }} || echo "Resource group already exists"
+        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
 
     - name: Deploy Bicep template
       id: deploy
@@ -65,7 +70,7 @@ jobs:
       run: |
         outputs=$(az deployment group show \
           --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name ${{ steps.deploy.deploymentName }} \
+          --name ${{ steps.deploy.outputs.deploymentName }} \
           --query properties.outputs)
         
         echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
