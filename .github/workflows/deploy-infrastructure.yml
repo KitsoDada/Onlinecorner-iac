@@ -16,7 +16,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production  # Changed from ${{ env.ENVIRONMENT }} to direct value
+    environment: production
     permissions:
       id-token: write
       contents: read
@@ -25,8 +25,15 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Install Azure CLI
+      uses: azure/setup-az-cli@v3  # Changed from setup-bicep to setup-az-cli
+      with:
+        azure-cli-version: '2.56.0'  # Specific version for stability
+
     - name: Install Bicep
-      uses: azure/setup-bicep@v1
+      run: |
+        az bicep install
+        az bicep upgrade
 
     - name: Validate Bicep file
       run: az bicep build --file ./main.bicep
