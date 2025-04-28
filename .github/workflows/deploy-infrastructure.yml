@@ -12,12 +12,11 @@ env:
   RESOURCE_GROUP: Online-cornerRG
   LOCATION: eastus
   DNS_PREFIX: onlinecorner
-  ENVIRONMENT: production
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ env.ENVIRONMENT }}
+    environment: production  # Changed from ${{ env.ENVIRONMENT }} to direct value
     permissions:
       id-token: write
       contents: read
