@@ -42,10 +42,6 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Create Resource Group if not exists
-      run: |
-        az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }} || echo "Resource group already exists"
-    
     - name: Deploy Bicep template
       id: deploy
       uses: azure/arm-deploy@v1
