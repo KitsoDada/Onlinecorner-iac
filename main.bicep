@@ -20,12 +20,6 @@ param agentCount int = 3
 @description('The size of the Virtual Machine.')
 param agentVMSize string = 'standard_d2s_v3'
 
-@description('User name for the Linux Virtual Machines.')
-param linuxAdminUsername string = 'azureuser'
-
-//@description('Configure all linux machines with the SSH RSA public key string.')
-//param sshRSAPublicKey string = 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQD...fakeKey...user@domain.com'
-
 @description('The name of virtual network.')
 param vnetName string = 'Online-corner-vnet'
 
@@ -49,29 +43,6 @@ param webAppName string = 'Online-corner-webapp${uniqueString(resourceGroup().id
 
 @description('The name of the container image.')
 param containerImage string = 'Online-corner-product-service:latest'
-
-//@description('Client ID of the Service Principal used for AKS.')
-//@secure()
-//param aksServicePrincipalClientId string = 'fake-client-id'
-
-//@description('DB connection string.')
-//param dbConnection string = 'Server=fakedb;Database=fake;Uid=fake;Pwd=fake;'
-
-//@description('DB Host.')
-//param dbHost string = 'localhost'
-
-//@description('DB Port.')
-//param dbPort string = '3306'
-
-//@description('DB Name.')
-//param dbName string = 'Online-corner'
-
-//@description('DB User.')
-//param dbUser string = 'root'
-
-//@description('DB Password.')
-//@secure()
-//param dbPassword string = 'fake-password'
 
 // Virtual Network
 resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
@@ -277,26 +248,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
         maxPods: 30
       }
     ]
-    //servicePrincipalProfile: {
-    //  clientId: aksServicePrincipalClientId
-    }
-   // linuxProfile: {
-     // adminUsername: linuxAdminUsername
-      //ssh: {
-        //publicKeys: [
-         // {
-           // keyData: sshRSAPublicKey
-         // }
-       // ]
-     // }
-    //}
-    //networkProfile: {
-      //networkPlugin: 'azure'
-      //serviceCidr: '10.2.0.0/16'
-      //dnsServiceIP: '10.2.0.10'
-      //loadBalancerSku: 'standard'
-   // }
-  //}
+  }
 }
 
 // App Service Plan
@@ -342,30 +294,6 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'DOCKER_ENABLE_CI'
           value: 'true'
-        }
-        {
-         // name: 'DB_CONNECTION'
-          //value: dbConnection
-        }
-        {
-         // name: 'DB_HOST'
-          //value: dbHost
-        }
-        {
-          //name: 'DB_PORT'
-          //value: dbPort
-        }
-        {
-          //name: 'DB_NAME'
-          //value: dbName
-        }
-        {
-          //name: 'DB_USER'
-          //value: dbUser
-        }
-        {
-          //name: 'DB_PASSWORD'
-          //value: dbPassword
         }
       ]
     }
