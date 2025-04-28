@@ -3,7 +3,7 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
@@ -44,7 +44,9 @@ jobs:
 
     - name: Check if Resource Group exists
       run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+        az group show --name ${{ env.RESOURCE_GROUP }} || \
+        (echo "Resource group does not exist. Creating..." && \
+        az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }})
 
     - name: Deploy Bicep template
       id: deploy
@@ -68,11 +70,21 @@ jobs:
     - name: Get deployment outputs
       id: outputs
       run: |
-        outputs=$(az deployment group show \
+        deployment_name=$(az deployment group show \
           --resource-group ${{ env.RESOURCE_GROUP }} \
           --name ${{ steps.deploy.outputs.deploymentName }} \
-          --query properties.outputs)
+          --query name -o tsv)
         
+        if [ -z "$deployment_name" ]; then
+          echo "Deployment failed!"
+          exit 1
+        fi
+
+        outputs=$(az deployment group show \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name $deployment_name \
+          --query properties.outputs)
+
         echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
         echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value')" >> $GITHUB_OUTPUT
         echo "acrName=$(echo $outputs | jq -r '.acrName.value')" >> $GITHUB_OUTPUT
