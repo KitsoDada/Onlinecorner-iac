@@ -42,8 +42,13 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    # Skipping the check for resource group existence if it's already there
-    # If you want to ensure the resource group exists, you can still use the `az group show` step.
+    - name: Check if Resource Group exists
+      run: |
+        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+
+    - name: Create Resource Group if not exists
+      run: |
+        az group show --name ${{ env.RESOURCE_GROUP }} || az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
 
     - name: Deploy Bicep template
       id: deploy
