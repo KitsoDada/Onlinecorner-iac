@@ -3,7 +3,7 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
@@ -42,9 +42,8 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Check if Resource Group exists
-      run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+    # Skipping the check for resource group existence if it's already there
+    # If you want to ensure the resource group exists, you can still use the `az group show` step.
 
     - name: Deploy Bicep template
       id: deploy
