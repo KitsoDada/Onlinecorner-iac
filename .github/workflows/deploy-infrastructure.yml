@@ -1,0 +1,98 @@
+name: Deploy Azure Infrastructure
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - '**/*.bicep'
+      - '.github/workflows/deploy-infrastructure.yml'
+  workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: Online-cornerRG
+  LOCATION: eastus
+  DNS_PREFIX: onlinecorner
+  ENVIRONMENT: production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ env.ENVIRONMENT }}
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Bicep
+      uses: azure/setup-bicep@v1
+
+    - name: Validate Bicep file
+      run: az bicep build --file ./main.bicep
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create Resource Group if not exists
+      run: |
+        az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }} || echo "Resource group already exists"
+
+    - name: Deploy Bicep template
+      id: deploy
+      uses: azure/arm-deploy@v1
+      with:
+        scope: resourcegroup
+        subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        resourceGroupName: ${{ env.RESOURCE_GROUP }}
+        template: ./main.bicep
+        parameters: |
+          dnsPrefix=${{ env.DNS_PREFIX }}
+          location=${{ env.LOCATION }}
+          linuxAdminUsername=${{ secrets.LINUX_ADMIN_USERNAME }}
+          sshRSAPublicKey=${{ secrets.SSH_RSA_PUBLIC_KEY }}
+          dbConnection=${{ secrets.DB_CONNECTION }}
+          dbHost=${{ secrets.DB_HOST }}
+          dbUser=${{ secrets.DB_USER }}
+          dbPassword=${{ secrets.DB_PASSWORD }}
+        failOnStdErr: false
+
+    - name: Get deployment outputs
+      id: outputs
+      run: |
+        outputs=$(az deployment group show \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ steps.deploy.deploymentName }} \
+          --query properties.outputs)
+        
+        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
+        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value')" >> $GITHUB_OUTPUT
+        echo "acrName=$(echo $outputs | jq -r '.acrName.value')" >> $GITHUB_OUTPUT
+        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value')" >> $GITHUB_OUTPUT
+        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value')" >> $GITHUB_OUTPUT
+
+    - name: Output deployment information
+      run: |
+        echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
+        echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
+        echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
+        echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
+        echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
+
+    - name: Attach ACR to AKS using managed identity
+      if: ${{ steps.outputs.outputs.aksClusterName != '' && steps.outputs.outputs.acrName != '' }}
+      run: |
+        az aks update \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ steps.outputs.outputs.aksClusterName }} \
+          --attach-acr ${{ steps.outputs.outputs.acrName }}
+
+    - name: Verify AKS cluster status
+      run: |
+        az aks show \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --name ${{ steps.outputs.outputs.aksClusterName }} \
+          --query provisioningState
