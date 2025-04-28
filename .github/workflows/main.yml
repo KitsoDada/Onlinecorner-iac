@@ -17,7 +17,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ env.ENVIRONMENT }}
+    environment: production  # Directly use 'production' instead of env.ENVIRONMENT
     permissions:
       id-token: write
       contents: read
