@@ -57,7 +57,7 @@ jobs:
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
         parameters: acrName=${{ env.ACR_NAME }}
-        deploymentName: ${{ env.DEPLOYMENT_NAME }}
+        deploymentName: "${{ env.DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
     - name: Get deployment outputs
@@ -65,14 +65,14 @@ jobs:
       run: |
         outputs=$(az deployment group show \
           --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name ${{ env.DEPLOYMENT_NAME }} \
+          --name "${{ env.DEPLOYMENT_NAME }}" \
           --query properties.outputs)
 
-        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
-        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value')" >> $GITHUB_OUTPUT
-        echo "acrName=$(echo $outputs | jq -r '.acrName.value')" >> $GITHUB_OUTPUT
-        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value')" >> $GITHUB_OUTPUT
-        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value')" >> $GITHUB_OUTPUT
+        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
+        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
+        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
+        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
+        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
 
     - name: Output deployment information
       run: |
