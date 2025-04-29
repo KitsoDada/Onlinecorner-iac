@@ -30,7 +30,7 @@ param publicSubnetName string = 'Online-corner-public-subnet'
 param privateSubnetName string = 'Online-corner-private-subnet'
 
 @description('The name of the Azure Container Registry.')
-param acrName string = 'Online-corneracr${uniqueString(resourceGroup().id)}'
+param acrName string = 'onlinecorneracr${uniqueString(resourceGroup().id)}'
 
 @description('The name of the Application Gateway.')
 param appGatewayName string = 'Online-corner-app-gateway'
@@ -58,13 +58,13 @@ resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
       {
         name: publicSubnetName
         properties: {
-          addressPrefix: '10.0.1.0/24'
+          addressPrefix: '10.1.1.0/24'
         }
       }
       {
         name: privateSubnetName
         properties: {
-          addressPrefix: '10.0.2.0/24'
+          addressPrefix: '10.1.2.0/24'
         }
       }
     ]
