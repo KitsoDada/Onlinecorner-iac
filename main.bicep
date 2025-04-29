@@ -122,6 +122,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
         name: 'rule1'
         properties: {
           ruleType: 'Basic'
+          priority: 100
           httpListener: {
             id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGatewayName, 'appGatewayHttpListener')
           }
@@ -200,10 +201,4 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     httpsOnly: true
   }
   kind: 'app,linux,container'
-  dependsOn: [
-    appServicePlan
-  ]
 }
-
-output acrName string = acr.name
-output acrLoginServer string = acr.properties.loginServer
