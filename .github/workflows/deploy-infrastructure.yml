@@ -13,6 +13,7 @@ env:
   LOCATION: eastus
   DNS_PREFIX: onlinecorner
   ACR_NAME: ocorneracr3
+  DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
 
 jobs:
   deploy:
@@ -56,6 +57,7 @@ jobs:
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
         parameters: acrName=${{ env.ACR_NAME }}
+        deploymentName: ${{ env.DEPLOYMENT_NAME }}
         failOnStdErr: false
 
     - name: Get deployment outputs
@@ -63,7 +65,7 @@ jobs:
       run: |
         outputs=$(az deployment group show \
           --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name ${{ steps.deploy.outputs.deploymentName }} \
+          --name ${{ env.DEPLOYMENT_NAME }} \
           --query properties.outputs)
 
         echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
