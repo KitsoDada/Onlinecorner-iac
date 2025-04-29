@@ -149,7 +149,6 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
       networkPlugin: 'azure'
       serviceCidr: '10.100.0.0/16'
       dnsServiceIP: '10.100.0.10'
-      
     }
     addonProfiles: {
       ingressApplicationGateway: {
@@ -205,3 +204,6 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     appServicePlan
   ]
 }
+
+output acrName string = acr.name
+output acrLoginServer string = acr.properties.loginServer
