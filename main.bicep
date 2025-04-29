@@ -51,20 +51,20 @@ resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
   properties: {
     addressSpace: {
       addressPrefixes: [
-        '10.1.0.0/16'
+        '10.0.0.0/16'
       ]
     }
     subnets: [
       {
         name: publicSubnetName
         properties: {
-          addressPrefix: '10.1.1.0/24'
+          addressPrefix: '10.0.1.0/24'
         }
       }
       {
         name: privateSubnetName
         properties: {
-          addressPrefix: '10.1.2.0/24'
+          addressPrefix: '10.0.2.0/24'
         }
       }
     ]
@@ -277,7 +277,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
       appSettings: [
         {
           name: 'DOCKER_REGISTRY_SERVER_URL'
-          value: 'https://${acr.properties.loginServer}/Online-corner-product-service'
+          value: 'https://${acr.properties.loginServer}'
         }
         {
           name: 'DOCKER_REGISTRY_SERVER_USERNAME'
