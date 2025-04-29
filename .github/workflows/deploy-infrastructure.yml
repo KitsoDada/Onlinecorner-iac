@@ -12,6 +12,7 @@ env:
   RESOURCE_GROUP: Online-cornerRG
   LOCATION: eastus
   DNS_PREFIX: onlinecorner
+  ACR_NAME: ocorneracr3
 
 jobs:
   deploy:
@@ -54,6 +55,7 @@ jobs:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
+        parameters: acrName=${{ env.ACR_NAME }}
         failOnStdErr: false
 
     - name: Get deployment outputs
@@ -63,7 +65,7 @@ jobs:
           --resource-group ${{ env.RESOURCE_GROUP }} \
           --name ${{ steps.deploy.outputs.deploymentName }} \
           --query properties.outputs)
-        
+
         echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value')" >> $GITHUB_OUTPUT
         echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value')" >> $GITHUB_OUTPUT
         echo "acrName=$(echo $outputs | jq -r '.acrName.value')" >> $GITHUB_OUTPUT
