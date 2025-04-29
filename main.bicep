@@ -212,3 +212,12 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   }
   kind: 'app,linux,container'
 }
+
+//
+// OUTPUTS SECTION
+//
+output controlPlaneFQDN string = aks.properties.fqdn
+output aksClusterName string = aks.name
+output acrName string = acr.name
+output appGatewayPublicIp string = publicIP.properties.ipAddress
+output webAppUrl string = webApp.properties.defaultHostName
