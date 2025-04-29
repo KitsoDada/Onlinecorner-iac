@@ -1,51 +1,30 @@
-@description('The name of the Managed Cluster resource.')
-param clusterName string = 'aksOnline-cornerCluster'
-
-@description('The location of the Managed Cluster resource.')
 param location string = resourceGroup().location
-
-@description('Optional DNS prefix to use with hosted Kubernetes API server FQDN.')
-param dnsPrefix string = 'onlinecorner'
-
-@description('Disk size (in GB) to provision for each of the agent pool nodes.')
-@minValue(0)
-@maxValue(1023)
-param osDiskSizeGB int = 0
-
-@description('The number of nodes for the cluster.')
-@minValue(1)
-@maxValue(50)
-param agentCount int = 3
-
-@description('The size of the Virtual Machine.')
-param agentVMSize string = 'standard_d2s_v3'
-
-@description('The name of virtual network.')
+param acrName string
 param vnetName string = 'Online-corner-vnet'
-
-@description('The name of the public subnet.')
 param publicSubnetName string = 'Online-corner-public-subnet'
-
-@description('The name of the private subnet.')
 param privateSubnetName string = 'Online-corner-private-subnet'
+param aksName string = 'aksOnline-cornerCluster'
+param dnsPrefix string = 'onlinecornerdns'
+param agentCount int = 2
+param agentVMSize string = 'Standard_DS2_v2'
+param osDiskSizeGB int = 30
+param appGatewayName string = 'online-corner-appgw'
+param appServicePlanName string = 'online-corner-plan'
+param webAppName string = 'online-corner-webapp'
+param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
 
-@description('The name of the Azure Container Registry.')
-param acrName string = 'onlinecorneracr${uniqueString(resourceGroup().id)}'
+resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
+  name: acrName
+  location: location
+  sku: {
+    name: 'Basic'
+  }
+  properties: {
+    adminUserEnabled: true
+  }
+}
 
-@description('The name of the Application Gateway.')
-param appGatewayName string = 'Online-corner-app-gateway'
-
-@description('The name of the App Service Plan.')
-param appServicePlanName string = 'Online-corner-app-service-plan'
-
-@description('The name of the Web App.')
-param webAppName string = 'Online-corner-webapp${uniqueString(resourceGroup().id)}'
-
-@description('The name of the container image.')
-param containerImage string = 'Online-corner-product-service:latest'
-
-// Virtual Network
-resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
+resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
   location: location
   properties: {
@@ -71,59 +50,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
   }
 }
 
-// Azure Container Registry
-resource acr 'Microsoft.ContainerRegistry/registries@2021-06-01-preview' = {
-  name: acrName
-  location: location
-  sku: {
-    name: 'Premium'
-  }
-  properties: {
-    adminUserEnabled: true
-    networkRuleSet: {
-      defaultAction: 'Allow'
-    }
-  }
-}
-
-// Private Endpoint for ACR
-resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2021-05-01' = {
-  name: '${acrName}-pe'
-  location: location
-  properties: {
-    subnet: {
-      id: '${vnet.id}/subnets/${privateSubnetName}'
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${acrName}-connection'
-        properties: {
-          privateLinkServiceId: acr.id
-          groupIds: [
-            'registry'
-          ]
-        }
-      }
-    ]
-  }
-}
-
-resource appGatewayPublicIp 'Microsoft.Network/publicIPAddresses@2021-05-01' = {
-  name: '${appGatewayName}-ip'
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  dependsOn: [
-    vnet
-  ]
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
-// Application Gateway
-resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
+resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
   name: appGatewayName
   location: location
   properties: {
@@ -144,54 +71,47 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
     ]
     frontendIPConfigurations: [
       {
-        name: 'appGatewayFrontendIp'
+        name: 'appGatewayFrontendIP'
         properties: {
-          publicIPAddress: {
-            id: appGatewayPublicIp.id
+          privateIPAllocationMethod: 'Dynamic'
+          subnet: {
+            id: '${vnet.id}/subnets/${publicSubnetName}'
           }
         }
       }
     ]
     frontendPorts: [
       {
-        name: 'httpPort'
+        name: 'appGatewayFrontendPort'
         properties: {
           port: 80
-        }
-      }
-      {
-        name: 'httpsPort'
-        properties: {
-          port: 443
         }
       }
     ]
     backendAddressPools: [
       {
-        name: 'aksBackendPool'
-        properties: {}
+        name: 'appGatewayBackendPool'
       }
     ]
     backendHttpSettingsCollection: [
       {
-        name: 'aksHttpSettings'
+        name: 'appGatewayBackendHttpSettings'
         properties: {
           port: 80
           protocol: 'Http'
           cookieBasedAffinity: 'Disabled'
-          requestTimeout: 20
         }
       }
     ]
     httpListeners: [
       {
-        name: 'aksHttpListener'
+        name: 'appGatewayHttpListener'
         properties: {
           frontendIPConfiguration: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGatewayName, 'appGatewayFrontendIp')
+            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGatewayName, 'appGatewayFrontendIP')
           }
           frontendPort: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGatewayName, 'httpPort')
+            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGatewayName, 'appGatewayFrontendPort')
           }
           protocol: 'Http'
         }
@@ -199,17 +119,17 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
     ]
     requestRoutingRules: [
       {
-        name: 'aksRoutingRule'
+        name: 'rule1'
         properties: {
           ruleType: 'Basic'
           httpListener: {
-            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGatewayName, 'aksHttpListener')
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGatewayName, 'appGatewayHttpListener')
           }
           backendAddressPool: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGatewayName, 'aksBackendPool')
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGatewayName, 'appGatewayBackendPool')
           }
           backendHttpSettings: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGatewayName, 'aksHttpSettings')
+            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGatewayName, 'appGatewayBackendHttpSettings')
           }
         }
       }
@@ -217,15 +137,20 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
   }
 }
 
-// AKS Cluster
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
-  name: clusterName
+  name: aksName
   location: location
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
     dnsPrefix: dnsPrefix
+    networkProfile: {
+      networkPlugin: 'azure'
+      serviceCidr: '10.100.0.0/16'
+      dnsServiceIP: '10.100.0.10'
+      dockerBridgeCidr: '172.17.0.1/16'
+    }
     addonProfiles: {
       ingressApplicationGateway: {
         enabled: true
@@ -237,11 +162,11 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
     agentPoolProfiles: [
       {
         name: 'agentpool'
-        osDiskSizeGB: osDiskSizeGB
         count: agentCount
         vmSize: agentVMSize
         osType: 'Linux'
         mode: 'System'
+        osDiskSizeGB: osDiskSizeGB
         type: 'VirtualMachineScaleSets'
         vnetSubnetID: '${vnet.id}/subnets/${privateSubnetName}'
         enableNodePublicIP: false
@@ -251,59 +176,32 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   }
 }
 
-// App Service Plan
-resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: appServicePlanName
   location: location
   sku: {
-    name: 'P1v2'
-    tier: 'PremiumV2'
+    name: 'B1'
+    tier: 'Basic'
+    size: 'B1'
+    capacity: 1
   }
-  kind: 'linux'
   properties: {
     reserved: true
   }
 }
 
-// Web App
-resource webApp 'Microsoft.Web/sites@2022-09-01' = {
+resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: webAppName
   location: location
-  kind: 'app,linux,container'
   properties: {
     serverFarmId: appServicePlan.id
     siteConfig: {
-      linuxFxVersion: 'DOCKER|${acr.properties.loginServer}/${containerImage}'
-      appSettings: [
-        {
-          name: 'DOCKER_REGISTRY_SERVER_URL'
-          value: 'https://${acr.properties.loginServer}'
-        }
-        {
-          name: 'DOCKER_REGISTRY_SERVER_USERNAME'
-          value: acr.properties.adminUserEnabled ? acr.properties.loginServer : ''
-        }
-        {
-          name: 'DOCKER_REGISTRY_SERVER_PASSWORD'
-          value: acr.properties.adminUserEnabled ? listCredentials(acr.id, '2023-07-01').passwords[0].value : ''
-        }
-        {
-          name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE'
-          value: 'false'
-        }
-        {
-          name: 'DOCKER_ENABLE_CI'
-          value: 'true'
-        }
-      ]
+      linuxFxVersion: linuxFxVersion
     }
+    httpsOnly: true
   }
+  kind: 'app,linux,container'
+  dependsOn: [
+    appServicePlan
+  ]
 }
-
-// Outputs
-output controlPlaneFQDN string = aks.properties.fqdn
-output aksClusterName string = aks.name
-output acrName string = acr.name
-output acrLoginServer string = acr.properties.loginServer
-output appGatewayPublicIp string = appGatewayPublicIp.properties.ipAddress
-output webAppUrl string = 'https://${webApp.properties.defaultHostName}'
