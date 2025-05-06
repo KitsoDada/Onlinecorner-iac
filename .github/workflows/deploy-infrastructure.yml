@@ -81,18 +81,3 @@ jobs:
         echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
         echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
         echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
-
-    - name: Attach ACR to AKS using managed identity
-      if: ${{ steps.outputs.outputs.aksClusterName != '' && steps.outputs.outputs.acrName != '' }}
-      run: |
-        az aks update \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name ${{ steps.outputs.outputs.aksClusterName }} \
-          --attach-acr ${{ steps.outputs.outputs.acrName }}
-
-    - name: Verify AKS cluster status
-      run: |
-        az aks show \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name ${{ steps.outputs.outputs.aksClusterName }} \
-          --query provisioningState
