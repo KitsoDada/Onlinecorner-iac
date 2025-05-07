@@ -1,6 +1,6 @@
 param location string = resourceGroup().location
 param acrName string
-param vnetName string = 'Online-corner-vnet'
+param vnetName string = 'Online-corner-vnet1'
 param publicSubnetName string = 'Online-corner-public-subnet'
 param privateSubnetName string = 'Online-corner-private-subnet'
 param aksName string = 'aksOnline-cornerCluster'
