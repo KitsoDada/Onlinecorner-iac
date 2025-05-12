@@ -3,7 +3,7 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
 env:
   RESOURCE_GROUP: Online-cornerRG
   LOCATION: eastus
-  DNS_PREFIX: onlinecorner
+  DNS_PREFIX: onlinecornerdns
   ACR_NAME: ocorneracr3
   DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
 
@@ -24,65 +24,68 @@ jobs:
       contents: read
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Azure CLI
-      run: |
-        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-    - name: Install Bicep
-      run: |
-        az bicep install
-        az bicep upgrade
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          az bicep upgrade
 
-    - name: Validate Bicep file
-      run: az bicep build --file ./main.bicep
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Validate Bicep Template
+        run: az bicep build --file ./main.bicep
 
-    - name: Check if Resource Group exists
-      run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+      - name: Create Resource Group if it doesn't exist
+        run: |
+          if ! az group show --name ${{ env.RESOURCE_GROUP }} &> /dev/null; then
+            az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
+          fi
 
-    - name: Deploy Bicep template
-      id: deploy
-      uses: azure/arm-deploy@v1
-      with:
-        scope: resourcegroup
-        subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        resourceGroupName: ${{ env.RESOURCE_GROUP }}
-        template: ./main.bicep
-        parameters: |
-          acrName=${{ env.ACR_NAME }}
-          sqlServerName=online-corner-sql
-          sqlDbName=eshop-db
-          sqlAdminLogin=eshopadmin
-          sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
-        deploymentName: "${{ env.DEPLOYMENT_NAME }}"
-        failOnStdErr: false
+      - name: Deploy Bicep Template
+        id: deploy
+        uses: azure/arm-deploy@v1
+        with:
+          scope: resourcegroup
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          resourceGroupName: ${{ env.RESOURCE_GROUP }}
+          template: ./main.bicep
+          parameters: |
+            acrName=${{ env.ACR_NAME }}
+            dnsPrefix=${{ env.DNS_PREFIX }}
+            sqlServerName=online-corner-sql
+            sqlDbName=eshop-db
+            sqlAdminLogin=eshopadmin
+            sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
+          deploymentName: ${{ env.DEPLOYMENT_NAME }}
+          failOnStdErr: false
 
-    - name: Get deployment outputs
-      id: outputs
-      run: |
-        outputs=$(az deployment group show \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name "${{ env.DEPLOYMENT_NAME }}" \
-          --query properties.outputs)
+      - name: Get Deployment Outputs
+        id: outputs
+        run: |
+          outputs=$(az deployment group show \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.DEPLOYMENT_NAME }} \
+            --query properties.outputs)
 
-        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
-        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
-        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
-        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
-        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
+          echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
+          echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
+          echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
+          echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
+          echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
 
-    - name: Output deployment information
-      run: |
-        echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
-        echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
-        echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
-        echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
-        echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
+      - name: Output Deployment Info
+        run: |
+          echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
+          echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
+          echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
+          echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
+          echo "Web App URL: https://${{ steps.outputs.outputs.webAppUrl }}"
