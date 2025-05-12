@@ -59,6 +59,7 @@ jobs:
           resourceGroupName: ${{ env.RESOURCE_GROUP }}
           template: ./main.bicep
           parameters: |
+            location=${{ env.LOCATION }}
             acrName=${{ env.ACR_NAME }}
             dnsPrefix=${{ env.DNS_PREFIX }}
             sqlServerName=online-corner-sql
@@ -69,23 +70,23 @@ jobs:
           failOnStdErr: false
 
       - name: Get Deployment Outputs
-        id: outputs
+        id: get_outputs
         run: |
           outputs=$(az deployment group show \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --name ${{ env.DEPLOYMENT_NAME }} \
             --query properties.outputs)
 
-          echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
-          echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
-          echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
-          echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
-          echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
+          echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_ENV
+          echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_ENV
+          echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_ENV
+          echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_ENV
+          echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_ENV
 
       - name: Output Deployment Info
         run: |
-          echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
-          echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
-          echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
-          echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
-          echo "Web App URL: https://${{ steps.outputs.outputs.webAppUrl }}"
+          echo "AKS Cluster Name: $aksClusterName"
+          echo "AKS Control Plane FQDN: $controlPlaneFQDN"
+          echo "ACR Name: $acrName"
+          echo "App Gateway Public IP: $appGatewayPublicIp"
+          echo "Web App URL: https://$webAppUrl"
