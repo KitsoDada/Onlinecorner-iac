@@ -12,12 +12,6 @@ param appGatewayName string = 'online-corner-appgw'
 param appServicePlanName string = 'online-corner-plan'
 param webAppName string = 'online-corner-webapp'
 param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
-param sqlServerName string = 'online-corner-sql'
-param sqlDbName string = 'eshop-db'
-param sqlAdminLogin string = 'eshopadmin'
-@secure()
-param sqlAdminPassword string
-
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: acrName
@@ -218,50 +212,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   }
   kind: 'app,linux,container'
 }
-resource sqlServer 'Microsoft.Sql/servers@2023-05-01-preview' = {
-  name: sqlServerName
-  location: location
-  properties: {
-    administratorLogin: sqlAdminLogin
-    administratorLoginPassword: sqlAdminPassword
-    minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
-  }
-}
 
-resource sqlDb 'Microsoft.Sql/servers/databases@2023-05-01-preview' = {
-  name: sqlDbName
-  parent: sqlServer
-  location: location
-  sku: {
-    name: 'GP_S_Gen5_2' // General Purpose, 2 vCores
-    tier: 'GeneralPurpose'
-    family: 'Gen5'
-    capacity: 2
-  }
-  properties: {
-    collation: 'SQL_Latin1_General_CP1_CI_AS'
-    maxSizeBytes: 34359738368 
-    zoneRedundant: false
-  }
-}
-resource firewallRule 'Microsoft.Sql/servers/firewallRules@2022-05-01-preview' = {
-  name: 'AllowAKS'
-  parent: sqlServer
-  properties: {
-    startIpAddress: '0.0.0.0' // For demo purposes - restrict to AKS outbound IPs in production
-    endIpAddress: '0.0.0.0'
-  }
-}
-// Connect AKS to SQL (RBAC)
-resource sqlRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: sqlServer
-  name: guid(sqlServer.id, aks.name, 'sql-contributor')
-  properties: {
-    principalId: aks.identity.principalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9b7fa17d-e63e-47b0-bb0a-15c516ac86ec') // SQL DB Contributor
-  }
-}
 //
 // OUTPUTS SECTION
 //
@@ -270,4 +221,3 @@ output aksClusterName string = aks.name
 output acrName string = acr.name
 output appGatewayPublicIp string = publicIP.properties.ipAddress
 output webAppUrl string = webApp.properties.defaultHostName
-output sqlConnectionString string = 'Server=tcp:${sqlServer.properties.fullyQualifiedDomainName},1433;Database=${sqlDbName};User ID=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=true;TrustServerCertificate=false;Connection Timeout=30;'
