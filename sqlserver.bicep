@@ -1,6 +1,5 @@
-@secure()
 @description('The administrator username for the SQL Server.')
-param adminUsername string
+param adminUsername string = 'adminuser'
 
 @secure()
 @description('The administrator password for the SQL Server.')

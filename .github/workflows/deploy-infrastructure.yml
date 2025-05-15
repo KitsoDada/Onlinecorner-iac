@@ -64,7 +64,6 @@ jobs:
         template: ./sqlserver.bicep
         parameters: |
           location=${{ env.SQL_LOCATION }}
-          adminUsername=${{ secrets.SQL_ADMIN_USERNAME }}
           adminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
         deploymentName: ${{ env.SQL_DEPLOYMENT_NAME }}
         failOnStdErr: false
@@ -85,7 +84,6 @@ jobs:
         parameters: |
           location=${{ env.LOCATION }}
           acrName=${{ env.ACR_NAME }}
-          adminUsername=${{ secrets.ADMIN_USERNAME }}
           adminPassword=${{ secrets.ADMIN_PASSWORD }}
         deploymentName: ${{ env.DEPLOYMENT_NAME }}
         failOnStdErr: false
