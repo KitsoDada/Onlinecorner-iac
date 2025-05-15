@@ -69,18 +69,24 @@ jobs:
         deploymentName: ${{ env.SQL_DEPLOYMENT_NAME }}
         failOnStdErr: false
 
-    - name: Check if App Resource Group exists
+    - name: Create App Resource Group if not exists
       run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || echo "App resource group does not exist"
+        az group create \
+          --name ${{ env.RESOURCE_GROUP }} \
+          --location ${{ env.LOCATION }}
 
-    - name: Deploy Main Infrastructure (AKS, ACR, etc.)
+    - name: Deploy Main Infrastructure (AKS, ACR, App Gateway, etc.)
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: acrName=${{ env.ACR_NAME }}
+        parameters: |
+          location=${{ env.LOCATION }}
+          acrName=${{ env.ACR_NAME }}
+          adminUsername=${{ secrets.ADMIN_USERNAME }}
+          adminPassword=${{ secrets.ADMIN_PASSWORD }}
         deploymentName: ${{ env.DEPLOYMENT_NAME }}
         failOnStdErr: false
 
