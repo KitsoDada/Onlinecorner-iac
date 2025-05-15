@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths: 
       - '**/*.bicep'
-      - '.github/workflows/deploy-infrastructure.yaml'
+      - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
 
 env:
@@ -14,6 +14,12 @@ env:
   DNS_PREFIX: onlinecorner
   ACR_NAME: ocorneracr3
   DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
+
+  # SQL Server deployment
+  SQL_RESOURCE_GROUP: OnlineCornerSQL-RG
+  SQL_LOCATION: westus
+  SQL_SERVER_NAME: onlinecorner-sql-${{ github.run_number }}
+  SQL_DEPLOYMENT_NAME: deploy-sql-${{ github.run_number }}
 
 jobs:
   deploy:
@@ -36,30 +42,50 @@ jobs:
         az bicep install
         az bicep upgrade
 
-    - name: Validate Bicep file
-      run: az bicep build --file ./main.bicep
-
     - name: Azure Login
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Check if Resource Group exists
+    - name: Validate Bicep files
       run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+        az bicep build --file ./main.bicep
+        az bicep build --file ./sqlserver.bicep
 
-    - name: Deploy Bicep template
-      id: deploy
+    - name: Create SQL Resource Group if not exists
+      run: |
+        az group create \
+          --name ${{ env.SQL_RESOURCE_GROUP }} \
+          --location ${{ env.SQL_LOCATION }}
+
+    - name: Deploy SQL Server
+      uses: azure/arm-deploy@v1
+      with:
+        scope: resourcegroup
+        subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        resourceGroupName: ${{ env.SQL_RESOURCE_GROUP }}
+        template: ./sqlserver.bicep
+        parameters: |
+          location=${{ env.SQL_LOCATION }}
+          sqlServerName=${{ env.SQL_SERVER_NAME }}
+          adminUsername=${{ secrets.SQL_ADMIN_USERNAME }}
+          adminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
+        deploymentName: ${{ env.SQL_DEPLOYMENT_NAME }}
+        failOnStdErr: false
+
+    - name: Check if App Resource Group exists
+      run: |
+        az group show --name ${{ env.RESOURCE_GROUP }} || echo "App resource group does not exist"
+
+    - name: Deploy Main Infrastructure (AKS, ACR, etc.)
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: >
-          acrName=${{ env.ACR_NAME }}
-          sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
-        deploymentName: "${{ env.DEPLOYMENT_NAME }}"
+        parameters: acrName=${{ env.ACR_NAME }}
+        deploymentName: ${{ env.DEPLOYMENT_NAME }}
         failOnStdErr: false
 
     - name: Get deployment outputs
