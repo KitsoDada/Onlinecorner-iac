@@ -64,7 +64,7 @@ jobs:
         template: ./sqlserver.bicep
         parameters: |
           location=${{ env.SQL_LOCATION }}
-        adminPassword: =${{ secrets.SQL_ADMIN_PASSWORD }}
+          adminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
         deploymentName: ${{ env.SQL_DEPLOYMENT_NAME }}
         failOnStdErr: false
 
