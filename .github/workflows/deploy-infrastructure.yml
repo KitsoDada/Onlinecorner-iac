@@ -3,19 +3,20 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
 
 env:
+  # App Infrastructure
   RESOURCE_GROUP: Online-cornerRG
   LOCATION: eastus
   DNS_PREFIX: onlinecorner
   ACR_NAME: ocorneracr3
   DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
 
-  # SQL Server deployment
+  # SQL Server
   SQL_RESOURCE_GROUP: OnlineCornerSQL-RG
   SQL_LOCATION: westus
   SQL_SERVER_NAME: onlinecorner-sql-${{ github.run_number }}
@@ -33,12 +34,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Azure CLI
+    - name: Install Azure CLI and Bicep
       run: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-
-    - name: Install Bicep
-      run: |
         az bicep install
         az bicep upgrade
 
