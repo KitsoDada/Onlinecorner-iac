@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths: 
       - '**/*.bicep'
-      - '.github/workflows/deploy-infrastructure.yml'
+      - '.github/workflows/deploy-infrastructure.yaml'
   workflow_dispatch:
 
 env:
@@ -30,10 +30,12 @@ jobs:
     - name: Install Azure CLI
       run: |
         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
     - name: Install Bicep
       run: |
         az bicep install
         az bicep upgrade
+
     - name: Validate Bicep file
       run: az bicep build --file ./main.bicep
 
@@ -45,6 +47,7 @@ jobs:
     - name: Check if Resource Group exists
       run: |
         az group show --name ${{ env.RESOURCE_GROUP }} || echo "Resource group does not exist"
+
     - name: Deploy Bicep template
       id: deploy
       uses: azure/arm-deploy@v1
@@ -53,7 +56,9 @@ jobs:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: acrName=${{ env.ACR_NAME }}
+        parameters: >
+          acrName=${{ env.ACR_NAME }}
+          sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
         deploymentName: "${{ env.DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
@@ -69,6 +74,7 @@ jobs:
         echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
         echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
         echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
+
     - name: Output deployment information
       run: |
         echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"

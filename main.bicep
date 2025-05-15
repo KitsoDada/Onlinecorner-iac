@@ -13,6 +13,13 @@ param appServicePlanName string = 'online-corner-plan'
 param webAppName string = 'online-corner-webapp'
 param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
 
+param sqlServerName string = 'eshop-sql-${uniqueString(resourceGroup().id)}'
+param sqlDatabaseName string = 'eshop-db'
+param sqlAdminUsername string = 'eshopadmin'
+@secure()
+param sqlAdminPassword string
+
+// Container Registry
 resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: acrName
   location: location
@@ -24,6 +31,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   }
 }
 
+// Virtual Network
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
   location: location
@@ -50,6 +58,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   }
 }
 
+// Public IP for App Gateway
 resource publicIP 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   name: 'online-corner-appgw-pip'
   location: location
@@ -61,6 +70,7 @@ resource publicIP 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   }
 }
 
+// Application Gateway
 resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
   name: appGatewayName
   location: location
@@ -148,6 +158,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
   }
 }
 
+// AKS Cluster
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: aksName
   location: location
@@ -186,6 +197,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   }
 }
 
+// App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: appServicePlanName
   location: location
@@ -200,6 +212,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   }
 }
 
+// Web App
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: webAppName
   location: location
@@ -213,6 +226,43 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   kind: 'app,linux,container'
 }
 
+// SQL Server
+resource sqlServer 'Microsoft.Sql/servers@2021-11-01' = {
+  name: sqlServerName
+  location: location
+  properties: {
+    administratorLogin: sqlAdminUsername
+    administratorLoginPassword: sqlAdminPassword
+    version: '12.0'
+    minimalTlsVersion: '1.2'
+  }
+}
+
+// SQL Database
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2021-11-01' = {
+  parent: sqlServer
+  name: sqlDatabaseName
+  location: location
+  sku: {
+    name: 'S0'
+    tier: 'Standard'
+  }
+  properties: {
+    collation: 'SQL_Latin1_General_CP1_CI_AS'
+    maxSizeBytes: 268435456000
+  }
+}
+
+// Allow Azure Services to access SQL
+resource firewallRule 'Microsoft.Sql/servers/firewallRules@2021-11-01' = {
+  parent: sqlServer
+  name: 'AllowAzureServices'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
 //
 // OUTPUTS SECTION
 //
@@ -221,3 +271,5 @@ output aksClusterName string = aks.name
 output acrName string = acr.name
 output appGatewayPublicIp string = publicIP.properties.ipAddress
 output webAppUrl string = webApp.properties.defaultHostName
+output sqlServerNameOut string = sqlServer.name
+output sqlDatabaseNameOut string = sqlDatabase.name
