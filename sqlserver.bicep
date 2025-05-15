@@ -3,7 +3,7 @@ param adminUsername string = 'adminuser'
 
 @secure()
 @description('The administrator password for the SQL Server.')
-param adminPassword string
+param adminPassword string 
 
 @description('The location where the SQL Server will be deployed.')
 param location string = resourceGroup().location
