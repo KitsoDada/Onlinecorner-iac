@@ -214,7 +214,7 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
 }
 
 //
-// OUTPUTS SECTION
+// Outputs
 //
 output controlPlaneFQDN string = aks.properties.fqdn
 output aksClusterName string = aks.name
