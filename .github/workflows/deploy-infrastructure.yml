@@ -19,7 +19,6 @@ env:
   # SQL Server
   SQL_RESOURCE_GROUP: OnlineCornerSQL-RG
   SQL_LOCATION: westus
-  SQL_SERVER_NAME: onlinecorner-sql-${{ github.run_number }}
   SQL_DEPLOYMENT_NAME: deploy-sql-${{ github.run_number }}
 
 jobs:
@@ -65,7 +64,6 @@ jobs:
         template: ./sqlserver.bicep
         parameters: |
           location=${{ env.SQL_LOCATION }}
-          sqlServerName=${{ env.SQL_SERVER_NAME }}
           adminUsername=${{ secrets.SQL_ADMIN_USERNAME }}
           adminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
         deploymentName: ${{ env.SQL_DEPLOYMENT_NAME }}

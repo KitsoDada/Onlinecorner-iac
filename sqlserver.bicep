@@ -1,6 +1,3 @@
-@description('The name of the SQL Server.')
-param sqlServerName string
-
 @secure()
 @description('The administrator username for the SQL Server.')
 param adminUsername string
@@ -13,7 +10,7 @@ param adminPassword string
 param location string = resourceGroup().location
 
 resource sqlServer 'Microsoft.Sql/servers@2022-05-01-preview' = {
-  name: sqlServerName
+  name: 'ocserver'
   location: location
   properties: {
     administratorLogin: adminUsername
