@@ -84,7 +84,6 @@ jobs:
         parameters: |
           location=${{ env.LOCATION }}
           acrName=${{ env.ACR_NAME }}
-          adminPassword=${{ secrets.ADMIN_PASSWORD }}
         deploymentName: ${{ env.DEPLOYMENT_NAME }}
         failOnStdErr: false
 
