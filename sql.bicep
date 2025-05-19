@@ -12,7 +12,7 @@ param sqlAdminUsername string = 'eshopadmin'
 param sqlAdminPassword string
 
 @description('Location for SQL resources (e.g., southafricanorth).')
-param location string = 'southafricanorth'
+param location string = resourceGroup().location
 
 @description('Environment tag (e.g., dev, prod).')
 param environment string = 'dev'

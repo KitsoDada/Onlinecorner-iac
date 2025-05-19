@@ -1,4 +1,5 @@
 param location string = resourceGroup().location
+
 param acrName string
 param vnetName string = 'Online-corner-vnet1'
 param publicSubnetName string = 'Online-corner-public-subnet'
@@ -23,10 +24,11 @@ param sqlDatabaseName string
 @secure()
 param sqlAdmin string
 
-@description('SQL Admin password')
 @secure()
+@description('SQL Admin password')
 param sqlPassword string
 
+// Container Registry
 resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: acrName
   location: location
@@ -38,6 +40,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   }
 }
 
+// Virtual Network with two subnets: public and private
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
   location: location
@@ -64,6 +67,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   }
 }
 
+// Public IP for Application Gateway
 resource publicIP 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   name: 'online-corner-appgw-pip'
   location: location
@@ -75,6 +79,7 @@ resource publicIP 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
   }
 }
 
+// Application Gateway
 resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
   name: appGatewayName
   location: location
@@ -162,6 +167,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
   }
 }
 
+// AKS Cluster
 resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   name: aksName
   location: location
@@ -174,6 +180,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
       networkPlugin: 'azure'
       serviceCidr: '10.100.0.0/16'
       dnsServiceIP: '10.100.0.10'
+      dockerBridgeCidr: '172.17.0.1/16'
     }
     addonProfiles: {
       ingressApplicationGateway: {
@@ -197,9 +204,11 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
         maxPods: 30
       }
     ]
+    enableRBAC: true
   }
 }
 
+// App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: appServicePlanName
   location: location
@@ -214,6 +223,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   }
 }
 
+// Web App (Node.js Container)
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: webAppName
   location: location
@@ -221,23 +231,23 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     serverFarmId: appServicePlan.id
     siteConfig: {
       linuxFxVersion: linuxFxVersion
+      appSettings: [
+        {
+          name: 'WEBSITES_PORT'
+          value: '3000'
+        }
+        {
+          name: 'SQL_CONNECTION_STRING'
+          value: 'Server=tcp:${sqlServerName}.database.windows.net,1433;Initial Catalog=${sqlDatabaseName};Persist Security Info=False;User ID=${sqlAdmin};Password=${sqlPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+        }
+      ]
     }
     httpsOnly: true
   }
   kind: 'app,linux,container'
 }
 
-// SQL Integration
-
-resource sqlServer 'Microsoft.Sql/servers@2022-05-01-preview' existing = {
-  name: sqlServerName
-}
-
-resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-05-01-preview' existing = {
-  parent: sqlServer
-  name: sqlDatabaseName
-}
-
+// SQL Private Endpoint for secure connectivity
 resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
   name: '${sqlServerName}-pe'
   location: location
@@ -249,7 +259,7 @@ resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
       {
         name: '${sqlServerName}-plsc'
         properties: {
-          privateLinkServiceId: sqlServer.id
+          privateLinkServiceId: resourceId('Microsoft.Sql/servers', sqlServerName)
           groupIds: [
             'sqlServer'
           ]
@@ -259,11 +269,13 @@ resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
   }
 }
 
+// Private DNS Zone for SQL
 resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2023-04-01' = {
   name: 'privatelink.database.windows.net'
   location: 'global'
 }
 
+// Link DNS Zone to VNet
 resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-04-01' = {
   name: '${vnet.name}-dnslink'
   parent: sqlPrivateDnsZone
@@ -276,27 +288,7 @@ resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-04
   }
 }
 
-resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-04-01' = {
-  name: 'default'
-  parent: sqlPrivateEndpoint
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'config'
-        properties: {
-          privateDnsZoneId: sqlPrivateDnsZone.id
-        }
-      }
-    ]
-  }
-}
-
-//
 // Outputs
-//
-output controlPlaneFQDN string = aks.properties.fqdn
+output acrLoginServer string = acr.properties.loginServer
 output aksClusterName string = aks.name
-output acrName string = acr.name
-output appGatewayPublicIp string = publicIP.properties.ipAddress
-output webAppUrl string = webApp.properties.defaultHostName
-output sqlConnectionString string = 'Server=${sqlServer.name}.privatelink.database.windows.net;Database=${sqlDatabase.name};User ID=${sqlAdmin};Password=${sqlPassword};Encrypt=true;Connection Timeout=30;'
+output webAppUrl string = 'https://${webAppName}.azurewebsites.net'
