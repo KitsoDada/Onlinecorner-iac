@@ -36,40 +36,36 @@ jobs:
         az bicep install
         az bicep upgrade
 
-    - name: Validate Bicep templates
-      run: |
-        az bicep build --file ./main.bicep
-        az bicep build --file ./sql.bicep
+    - name: Validate Bicep file
+      run: az bicep build --file ./main.bicep
 
     - name: Azure Login
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Ensure Main Resource Group Exists
+    - name: Check if Main RG exists
       run: |
-        az group show --name ${{ env.RESOURCE_GROUP }} || \
-        az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
+        az group show --name ${{ env.RESOURCE_GROUP }} || az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
 
     - name: Deploy Main Infrastructure
-      id: deploy_main
+      id: deploy
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: acrName=${{ env.ACR_NAME }}
+        parameters: acrName=${{ env.ACR_NAME }} location=${{ env.LOCATION }} dnsPrefix=${{ env.DNS_PREFIX }}
         deploymentName: "${{ env.DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
-    - name: Ensure SQL Resource Group Exists
+    - name: Check/Create SQL RG
       run: |
-        az group show --name ${{ env.SQL_RESOURCE_GROUP }} || \
-        az group create --name ${{ env.SQL_RESOURCE_GROUP }} --location ${{ env.SQL_LOCATION }}
+        az group show --name ${{ env.SQL_RESOURCE_GROUP }} || az group create --name ${{ env.SQL_RESOURCE_GROUP }} --location ${{ env.SQL_LOCATION }}
 
-    - name: Deploy SQL Server and Database
-      id: deploy_sql
+    - name: Deploy SQL Server + Database
+      id: sql_deploy
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
@@ -78,28 +74,49 @@ jobs:
         template: ./sql.bicep
         parameters: |
           sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
+          sqlAdminUsername=eshopadmin
+          sqlDatabaseName=eshop-db
           location=${{ env.SQL_LOCATION }}
+          environment=dev
         deploymentName: "${{ env.SQL_DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
-    - name: Extract Outputs from Main Deployment
-      id: get_outputs
+    - name: Get Main Infra Outputs
+      id: outputs
       run: |
         outputs=$(az deployment group show \
           --resource-group ${{ env.RESOURCE_GROUP }} \
           --name "${{ env.DEPLOYMENT_NAME }}" \
           --query properties.outputs)
+        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
+        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
+        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
+        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
+        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
 
-        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_ENV
-        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_ENV
-        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_ENV
-        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_ENV
-        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_ENV
+    - name: Get SQL Connection String Output
+      id: sql_output
+      run: |
+        sql_outputs=$(az deployment group show \
+          --resource-group ${{ env.SQL_RESOURCE_GROUP }} \
+          --name "${{ env.SQL_DEPLOYMENT_NAME }}" \
+          --query properties.outputs)
+        connectionString=$(echo $sql_outputs | jq -r '.sqlConnectionString.value')
+        echo "sqlConnectionString=$connectionString" >> $GITHUB_OUTPUT
+
+    - name: Base64 Encode SQL Connection String
+      id: base64_encode
+      run: |
+        echo -n "${{ steps.sql_output.outputs.sqlConnectionString }}" | base64 > encoded.txt
+        encoded=$(cat encoded.txt)
+        echo "sqlConnectionStringBase64=$encoded" >> $GITHUB_OUTPUT
 
     - name: Output Infra Deployment Info
       run: |
-        echo "✅ AKS Cluster Name: $aksClusterName"
-        echo "✅ AKS Control Plane FQDN: $controlPlaneFQDN"
-        echo "✅ ACR Name: $acrName"
-        echo "✅ App Gateway Public IP: $appGatewayPublicIp"
-        echo "✅ Web App URL: $webAppUrl"
+        echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
+        echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
+        echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
+        echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
+        echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
+        echo "SQL Connection String: ${{ steps.sql_output.outputs.sqlConnectionString }}"
+        echo "SQL Connection String Base64: ${{ steps.base64_encode.outputs.sqlConnectionStringBase64 }}"

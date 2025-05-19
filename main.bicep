@@ -1,48 +1,22 @@
+@description('Location for all resources.')
 param location string = resourceGroup().location
 
-param acrName string
-param vnetName string = 'Online-corner-vnet1'
-param publicSubnetName string = 'Online-corner-public-subnet'
-param privateSubnetName string = 'Online-corner-private-subnet'
-param aksName string = 'aksOnline-cornerCluster'
-param dnsPrefix string = 'onlinecornerdns'
-param agentCount int = 2
-param agentVMSize string = 'Standard_DS2_v2'
-param osDiskSizeGB int = 30
-param appGatewayName string = 'online-corner-appgw'
-param appServicePlanName string = 'online-corner-plan'
-param webAppName string = 'online-corner-webapp'
-param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
-
-@description('SQL Server name')
-param sqlServerName string
-
-@description('SQL Database name')
-param sqlDatabaseName string
-
-@description('SQL Admin login')
-@secure()
+@description('SQL Admin Username')
 param sqlAdmin string
 
 @secure()
-@description('SQL Admin password')
+@description('SQL Admin Password')
 param sqlPassword string
 
-// Container Registry
-resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
-  name: acrName
-  location: location
-  sku: {
-    name: 'Basic'
-  }
-  properties: {
-    adminUserEnabled: true
-  }
-}
+@description('Resource prefix')
+param prefix string = 'eshop'
 
-// Virtual Network with two subnets: public and private
+@description('Environment tag')
+param environment string = 'dev'
+
+// Networking
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
-  name: vnetName
+  name: '${prefix}-vnet'
   location: location
   properties: {
     addressSpace: {
@@ -52,232 +26,44 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
     }
     subnets: [
       {
-        name: publicSubnetName
+        name: 'default'
         properties: {
           addressPrefix: '10.0.1.0/24'
         }
       }
       {
-        name: privateSubnetName
+        name: 'private-endpoints'
         properties: {
           addressPrefix: '10.0.2.0/24'
+          privateEndpointNetworkPolicies: 'Disabled'
         }
       }
     ]
   }
 }
 
-// Public IP for Application Gateway
-resource publicIP 'Microsoft.Network/publicIPAddresses@2023-04-01' = {
-  name: 'online-corner-appgw-pip'
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    publicIPAllocationMethod: 'Static'
-  }
-}
-
-// Application Gateway
-resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
-  name: appGatewayName
-  location: location
-  properties: {
-    sku: {
-      name: 'Standard_v2'
-      tier: 'Standard_v2'
-      capacity: 2
-    }
-    gatewayIPConfigurations: [
-      {
-        name: 'appGatewayIpConfig'
-        properties: {
-          subnet: {
-            id: '${vnet.id}/subnets/${publicSubnetName}'
-          }
-        }
-      }
-    ]
-    frontendIPConfigurations: [
-      {
-        name: 'appGatewayFrontendIP'
-        properties: {
-          publicIPAddress: {
-            id: publicIP.id
-          }
-        }
-      }
-    ]
-    frontendPorts: [
-      {
-        name: 'appGatewayFrontendPort'
-        properties: {
-          port: 80
-        }
-      }
-    ]
-    backendAddressPools: [
-      {
-        name: 'appGatewayBackendPool'
-      }
-    ]
-    backendHttpSettingsCollection: [
-      {
-        name: 'appGatewayBackendHttpSettings'
-        properties: {
-          port: 80
-          protocol: 'Http'
-          cookieBasedAffinity: 'Disabled'
-        }
-      }
-    ]
-    httpListeners: [
-      {
-        name: 'appGatewayHttpListener'
-        properties: {
-          frontendIPConfiguration: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGatewayName, 'appGatewayFrontendIP')
-          }
-          frontendPort: {
-            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGatewayName, 'appGatewayFrontendPort')
-          }
-          protocol: 'Http'
-        }
-      }
-    ]
-    requestRoutingRules: [
-      {
-        name: 'rule1'
-        properties: {
-          ruleType: 'Basic'
-          priority: 100
-          httpListener: {
-            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGatewayName, 'appGatewayHttpListener')
-          }
-          backendAddressPool: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGatewayName, 'appGatewayBackendPool')
-          }
-          backendHttpSettings: {
-            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGatewayName, 'appGatewayBackendHttpSettings')
-          }
-        }
-      }
-    ]
+// Module: SQL
+module sqlModule 'sql.bicep' = {
+  name: 'sqlDeployment'
+  params: {
+    sqlServerName: '${prefix}-sql-${uniqueString(resourceGroup().id)}'
+    sqlDatabaseName: '${prefix}-db'
+    sqlAdminUsername: sqlAdmin
+    sqlAdminPassword: sqlPassword
+    location: location
+    environment: environment
   }
 }
 
-// AKS Cluster
-resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
-  name: aksName
-  location: location
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    dnsPrefix: dnsPrefix
-    networkProfile: {
-      networkPlugin: 'azure'
-      serviceCidr: '10.100.0.0/16'
-      dnsServiceIP: '10.100.0.10'
-      dockerBridgeCidr: '172.17.0.1/16'
-    }
-    addonProfiles: {
-      ingressApplicationGateway: {
-        enabled: true
-        config: {
-          applicationGatewayId: appGateway.id
-        }
-      }
-    }
-    agentPoolProfiles: [
-      {
-        name: 'agentpool'
-        count: agentCount
-        vmSize: agentVMSize
-        osType: 'Linux'
-        mode: 'System'
-        osDiskSizeGB: osDiskSizeGB
-        type: 'VirtualMachineScaleSets'
-        vnetSubnetID: '${vnet.id}/subnets/${privateSubnetName}'
-        enableNodePublicIP: false
-        maxPods: 30
-      }
-    ]
-    enableRBAC: true
-  }
-}
-
-// App Service Plan
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
-  name: appServicePlanName
-  location: location
-  sku: {
-    name: 'B1'
-    tier: 'Basic'
-    size: 'B1'
-    capacity: 1
-  }
-  properties: {
-    reserved: true
-  }
-}
-
-// Web App (Node.js Container)
-resource webApp 'Microsoft.Web/sites@2023-01-01' = {
-  name: webAppName
-  location: location
-  properties: {
-    serverFarmId: appServicePlan.id
-    siteConfig: {
-      linuxFxVersion: linuxFxVersion
-      appSettings: [
-        {
-          name: 'WEBSITES_PORT'
-          value: '3000'
-        }
-        {
-          name: 'SQL_CONNECTION_STRING'
-          value: 'Server=tcp:${sqlServerName}.database.windows.net,1433;Initial Catalog=${sqlDatabaseName};Persist Security Info=False;User ID=${sqlAdmin};Password=${sqlPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
-        }
-      ]
-    }
-    httpsOnly: true
-  }
-  kind: 'app,linux,container'
-}
-
-// SQL Private Endpoint for secure connectivity
-resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
-  name: '${sqlServerName}-pe'
-  location: location
-  properties: {
-    subnet: {
-      id: '${vnet.id}/subnets/${privateSubnetName}'
-    }
-    privateLinkServiceConnections: [
-      {
-        name: '${sqlServerName}-plsc'
-        properties: {
-          privateLinkServiceId: resourceId('Microsoft.Sql/servers', sqlServerName)
-          groupIds: [
-            'sqlServer'
-          ]
-        }
-      }
-    ]
-  }
-}
-
-// Private DNS Zone for SQL
-resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2023-04-01' = {
+// Private DNS zone
+resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2023-05-01' = {
   name: 'privatelink.database.windows.net'
   location: 'global'
 }
 
-// Link DNS Zone to VNet
-resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-04-01' = {
-  name: '${vnet.name}-dnslink'
+// VNet Link to DNS Zone
+resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-05-01' = {
+  name: '${sqlPrivateDnsZone.name}-link'
   parent: sqlPrivateDnsZone
   location: 'global'
   properties: {
@@ -288,7 +74,97 @@ resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-04
   }
 }
 
-// Outputs
-output acrLoginServer string = acr.properties.loginServer
-output aksClusterName string = aks.name
-output webAppUrl string = 'https://${webAppName}.azurewebsites.net'
+// Private Endpoint for SQL Server
+resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+  name: '${prefix}-sql-pe'
+  location: location
+  properties: {
+    subnet: {
+      id: vnet.properties.subnets[1].id
+    }
+    privateLinkServiceConnections: [
+      {
+        name: 'sqlConnection'
+        properties: {
+          privateLinkServiceId: sqlModule.outputs.sqlServerResourceId
+          groupIds: [ 'sqlServer' ]
+        }
+      }
+    ]
+  }
+}
+
+// Private DNS Zone Group
+resource sqlPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+  name: 'default'
+  parent: sqlPrivateEndpoint
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'sqlDns'
+        properties: {
+          privateDnsZoneId: sqlPrivateDnsZone.id
+        }
+      }
+    ]
+  }
+}
+
+// App Service Plan
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
+  name: '${prefix}-asp'
+  location: location
+  sku: {
+    name: 'P1v2'
+    tier: 'PremiumV2'
+    capacity: 1
+  }
+  properties: {
+    reserved: false
+  }
+}
+
+// Web App
+resource webApp 'Microsoft.Web/sites@2023-01-01' = {
+  name: '${prefix}-frontend'
+  location: location
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      appSettings: [
+        {
+          name: 'SQL_CONNECTION_STRING'
+          value: sqlModule.outputs.sqlConnectionString
+        }
+        {
+          name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE'
+          value: 'false'
+        }
+      ]
+    }
+  }
+}
+
+// AKS cluster (simplified)
+resource aks 'Microsoft.ContainerService/managedClusters@2023-01-02-preview' = {
+  name: '${prefix}-aks'
+  location: location
+  properties: {
+    dnsPrefix: '${prefix}aksdns'
+    agentPoolProfiles: [
+      {
+        name: 'nodepool1'
+        count: 1
+        vmSize: 'Standard_DS2_v2'
+        osType: 'Linux'
+        mode: 'System'
+      }
+    ]
+    networkProfile: {
+      networkPlugin: 'azure'
+      dnsServiceIp: '10.2.0.10'
+      serviceCidr: '10.2.0.0/24'
+      dockerBridgeCidr: '172.17.0.1/16'
+    }
+  }
+}

@@ -54,3 +54,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-05-01-preview' = {
 
 // Output secure connection string
 output sqlConnectionString string = 'Server=tcp:${sqlServer.name}.database.windows.net,1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdminUsername};Password=${sqlAdminPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+
+output sqlServerName string = sqlServer.name
+output sqlDatabaseName string = sqlDatabase.name
+output sqlServerResourceId string = sqlServer.id
