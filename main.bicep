@@ -13,6 +13,20 @@ param appServicePlanName string = 'online-corner-plan'
 param webAppName string = 'online-corner-webapp'
 param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
 
+@description('SQL Server name')
+param sqlServerName string
+
+@description('SQL Database name')
+param sqlDatabaseName string
+
+@description('SQL Admin login')
+@secure()
+param sqlAdmin string
+
+@description('SQL Admin password')
+@secure()
+param sqlPassword string
+
 resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: acrName
   location: location
@@ -213,6 +227,70 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   kind: 'app,linux,container'
 }
 
+// SQL Integration
+
+resource sqlServer 'Microsoft.Sql/servers@2022-05-01-preview' existing = {
+  name: sqlServerName
+}
+
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-05-01-preview' existing = {
+  parent: sqlServer
+  name: sqlDatabaseName
+}
+
+resource sqlPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-04-01' = {
+  name: '${sqlServerName}-pe'
+  location: location
+  properties: {
+    subnet: {
+      id: '${vnet.id}/subnets/${privateSubnetName}'
+    }
+    privateLinkServiceConnections: [
+      {
+        name: '${sqlServerName}-plsc'
+        properties: {
+          privateLinkServiceId: sqlServer.id
+          groupIds: [
+            'sqlServer'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+resource sqlPrivateDnsZone 'Microsoft.Network/privateDnsZones@2023-04-01' = {
+  name: 'privatelink.database.windows.net'
+  location: 'global'
+}
+
+resource vnetLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2023-04-01' = {
+  name: '${vnet.name}-dnslink'
+  parent: sqlPrivateDnsZone
+  location: 'global'
+  properties: {
+    virtualNetwork: {
+      id: vnet.id
+    }
+    registrationEnabled: false
+  }
+}
+
+resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-04-01' = {
+  name: 'default'
+  parent: sqlPrivateEndpoint
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'config'
+        properties: {
+          privateDnsZoneId: sqlPrivateDnsZone.id
+        }
+      }
+    ]
+  }
+}
+
 //
 // Outputs
 //
@@ -221,3 +299,4 @@ output aksClusterName string = aks.name
 output acrName string = acr.name
 output appGatewayPublicIp string = publicIP.properties.ipAddress
 output webAppUrl string = webApp.properties.defaultHostName
+output sqlConnectionString string = 'Server=${sqlServer.name}.privatelink.database.windows.net;Database=${sqlDatabase.name};User ID=${sqlAdmin};Password=${sqlPassword};Encrypt=true;Connection Timeout=30;'

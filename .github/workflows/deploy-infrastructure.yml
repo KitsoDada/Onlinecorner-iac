@@ -3,7 +3,7 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths: 
+    paths:
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
@@ -17,6 +17,11 @@ env:
   ACR_NAME: ocorneracr3
   DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
   SQL_DEPLOYMENT_NAME: deploy-sql-${{ github.run_number }}
+  ORDER_SECRET_NAME: order-sql-secret
+  PRODUCT_SECRET_NAME: product-sql-secret
+  FRONTEND_WEBAPP_NAME: online-corner-webapp
+  ORDER_SERVICE_NAME: order-service
+  PRODUCT_SERVICE_NAME: product-service
 
 jobs:
   deploy:
@@ -44,12 +49,12 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Check if Main RG exists
+    - name: Check/Create Main RG
       run: |
         az group show --name ${{ env.RESOURCE_GROUP }} || az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
 
     - name: Deploy Main Infrastructure
-      id: deploy
+      id: deploy_main
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
@@ -65,6 +70,7 @@ jobs:
         az group show --name ${{ env.SQL_RESOURCE_GROUP }} || az group create --name ${{ env.SQL_RESOURCE_GROUP }} --location ${{ env.SQL_LOCATION }}
 
     - name: Deploy SQL Server + Database
+      id: deploy_sql
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
@@ -77,23 +83,36 @@ jobs:
         deploymentName: "${{ env.SQL_DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
-    - name: Get Main Infra Outputs
-      id: outputs
+    - name: Extract SQL Connection String
+      id: sql_output
       run: |
         outputs=$(az deployment group show \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --name "${{ env.DEPLOYMENT_NAME }}" \
+          --resource-group ${{ env.SQL_RESOURCE_GROUP }} \
+          --name "${{ env.SQL_DEPLOYMENT_NAME }}" \
           --query properties.outputs)
-        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_OUTPUT
-        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_OUTPUT
-        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_OUTPUT
-        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
-        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
+        connString=$(echo $outputs | jq -r '.sqlConnectionString.value // empty')
+        echo "connection_string=$connString" >> $GITHUB_OUTPUT
 
-    - name: Output Infra Deployment Info
+    - name: Get AKS Credentials
       run: |
-        echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
-        echo "AKS Control Plane FQDN: ${{ steps.outputs.outputs.controlPlaneFQDN }}"
-        echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
-        echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
-        echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
+        aksName=$(az deployment group show --resource-group ${{ env.RESOURCE_GROUP }} --name "${{ env.DEPLOYMENT_NAME }}" --query "properties.outputs.aksClusterName.value" -o tsv)
+        az aks get-credentials --name $aksName --resource-group ${{ env.RESOURCE_GROUP }} --overwrite-existing
+
+    - name: Create Kubernetes Secret for Order Service (.NET)
+      run: |
+        kubectl create secret generic ${{ env.ORDER_SECRET_NAME }} \
+          --from-literal=SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}" \
+          --namespace ${{ env.ORDER_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Create Kubernetes Secret for Product Service (PHP)
+      run: |
+        kubectl create secret generic ${{ env.PRODUCT_SECRET_NAME }} \
+          --from-literal=SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}" \
+          --namespace ${{ env.PRODUCT_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Set SQL Connection String in Web App App Settings (Node.js)
+      run: |
+        az webapp config appsettings set \
+          --name ${{ env.FRONTEND_WEBAPP_NAME }} \
+          --resource-group ${{ env.RESOURCE_GROUP }} \
+          --settings SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}"

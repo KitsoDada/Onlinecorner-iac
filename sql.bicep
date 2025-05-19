@@ -61,3 +61,6 @@ resource firewallRule 'Microsoft.Sql/servers/firewallRules@2022-05-01-preview' =
     endIpAddress: '0.0.0.0'
   }
 }
+
+// Output the SQL connection string
+output sqlConnectionString string = 'Server=tcp:${sqlServer.name}.database.windows.net,1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdminUsername};Password=${sqlAdminPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
