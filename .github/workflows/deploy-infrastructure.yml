@@ -3,25 +3,20 @@ name: Deploy Azure Infrastructure
 on:
   push:
     branches: [ main ]
-    paths:
+    paths: 
       - '**/*.bicep'
       - '.github/workflows/deploy-infrastructure.yml'
   workflow_dispatch:
 
 env:
-  RESOURCE_GROUP: Online-cornerRG                
-  LOCATION: eastus                   
-  SQL_RESOURCE_GROUP: Ecommerce-SQL-RG        # Separate RG for SQL resources
+  RESOURCE_GROUP: Online-cornerRG
+  LOCATION: eastus
+  SQL_RESOURCE_GROUP: OnlineCornerSQL-RG
   SQL_LOCATION: southafricanorth
-  DNS_PREFIX: ecommerce                       # Your DNS prefix for ingress or app gateway
-  ACR_NAME: ecommerceacr                      # Your Azure Container Registry name
+  DNS_PREFIX: onlinecorner
+  ACR_NAME: ocorneracr3
   DEPLOYMENT_NAME: deploy-infra-${{ github.run_number }}
   SQL_DEPLOYMENT_NAME: deploy-sql-${{ github.run_number }}
-  ORDER_SECRET_NAME: order-sql-secret
-  PRODUCT_SECRET_NAME: product-sql-secret
-  FRONTEND_WEBAPP_NAME: frontend-service      # Your Node.js frontend web app name
-  ORDER_SERVICE_NAME: order-service            # .NET service namespace
-  PRODUCT_SERVICE_NAME: product-service        # PHP service namespace
 
 jobs:
   deploy:
@@ -41,15 +36,17 @@ jobs:
         az bicep install
         az bicep upgrade
 
-    - name: Validate Bicep file
-      run: az bicep build --file ./main.bicep
+    - name: Validate Bicep templates
+      run: |
+        az bicep build --file ./main.bicep
+        az bicep build --file ./sql.bicep
 
     - name: Azure Login
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Check/Create Main RG
+    - name: Ensure Main Resource Group Exists
       run: |
         az group show --name ${{ env.RESOURCE_GROUP }} || \
         az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
@@ -62,16 +59,16 @@ jobs:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: acrName=${{ env.ACR_NAME }} dnsPrefix=${{ env.DNS_PREFIX }}
+        parameters: acrName=${{ env.ACR_NAME }}
         deploymentName: "${{ env.DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
-    - name: Check/Create SQL RG
+    - name: Ensure SQL Resource Group Exists
       run: |
         az group show --name ${{ env.SQL_RESOURCE_GROUP }} || \
         az group create --name ${{ env.SQL_RESOURCE_GROUP }} --location ${{ env.SQL_LOCATION }}
 
-    - name: Deploy SQL Server + Database
+    - name: Deploy SQL Server and Database
       id: deploy_sql
       uses: azure/arm-deploy@v1
       with:
@@ -85,38 +82,24 @@ jobs:
         deploymentName: "${{ env.SQL_DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
-    - name: Extract SQL Connection String
-      id: sql_output
+    - name: Extract Outputs from Main Deployment
+      id: get_outputs
       run: |
         outputs=$(az deployment group show \
-          --resource-group ${{ env.SQL_RESOURCE_GROUP }} \
-          --name "${{ env.SQL_DEPLOYMENT_NAME }}" \
-          --query properties.outputs)
-        connString=$(echo $outputs | jq -r '.sqlConnectionString.value // empty')
-        echo "connection_string=$connString" >> $GITHUB_OUTPUT
-
-    - name: Get AKS Credentials
-      run: |
-        aksName=$(az deployment group show --resource-group ${{ env.RESOURCE_GROUP }} --name "${{ env.DEPLOYMENT_NAME }}" --query "properties.outputs.aksClusterName.value" -o tsv)
-        az aks get-credentials --name $aksName --resource-group ${{ env.RESOURCE_GROUP }} --overwrite-existing
-
-    - name: Create Kubernetes Secret for Order Service (.NET)
-      run: |
-        kubectl create namespace ${{ env.ORDER_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
-        kubectl create secret generic ${{ env.ORDER_SECRET_NAME }} \
-          --from-literal=SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}" \
-          --namespace ${{ env.ORDER_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
-
-    - name: Create Kubernetes Secret for Product Service (PHP)
-      run: |
-        kubectl create namespace ${{ env.PRODUCT_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
-        kubectl create secret generic ${{ env.PRODUCT_SECRET_NAME }} \
-          --from-literal=SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}" \
-          --namespace ${{ env.PRODUCT_SERVICE_NAME }} --dry-run=client -o yaml | kubectl apply -f -
-
-    - name: Set SQL Connection String in Web App App Settings (Node.js)
-      run: |
-        az webapp config appsettings set \
-          --name ${{ env.FRONTEND_WEBAPP_NAME }} \
           --resource-group ${{ env.RESOURCE_GROUP }} \
-          --settings SQL_CONNECTION_STRING="${{ steps.sql_output.outputs.connection_string }}"
+          --name "${{ env.DEPLOYMENT_NAME }}" \
+          --query properties.outputs)
+
+        echo "controlPlaneFQDN=$(echo $outputs | jq -r '.controlPlaneFQDN.value // empty')" >> $GITHUB_ENV
+        echo "aksClusterName=$(echo $outputs | jq -r '.aksClusterName.value // empty')" >> $GITHUB_ENV
+        echo "acrName=$(echo $outputs | jq -r '.acrName.value // empty')" >> $GITHUB_ENV
+        echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_ENV
+        echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_ENV
+
+    - name: Output Infra Deployment Info
+      run: |
+        echo "✅ AKS Cluster Name: $aksClusterName"
+        echo "✅ AKS Control Plane FQDN: $controlPlaneFQDN"
+        echo "✅ ACR Name: $acrName"
+        echo "✅ App Gateway Public IP: $appGatewayPublicIp"
+        echo "✅ Web App URL: $webAppUrl"
