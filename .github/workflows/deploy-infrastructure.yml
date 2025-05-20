@@ -56,7 +56,7 @@ jobs:
         subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         resourceGroupName: ${{ env.RESOURCE_GROUP }}
         template: ./main.bicep
-        parameters: acrName=${{ env.ACR_NAME }} location=${{ env.LOCATION }} dnsPrefix=${{ env.DNS_PREFIX }}
+        parameters: acrName=${{ env.ACR_NAME }}
         deploymentName: "${{ env.DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
@@ -65,7 +65,6 @@ jobs:
         az group show --name ${{ env.SQL_RESOURCE_GROUP }} || az group create --name ${{ env.SQL_RESOURCE_GROUP }} --location ${{ env.SQL_LOCATION }}
 
     - name: Deploy SQL Server + Database
-      id: sql_deploy
       uses: azure/arm-deploy@v1
       with:
         scope: resourcegroup
@@ -74,10 +73,7 @@ jobs:
         template: ./sql.bicep
         parameters: |
           sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }}
-          sqlAdminUsername=eshopadmin
-          sqlDatabaseName=eshop-db
           location=${{ env.SQL_LOCATION }}
-          environment=dev
         deploymentName: "${{ env.SQL_DEPLOYMENT_NAME }}"
         failOnStdErr: false
 
@@ -94,23 +90,6 @@ jobs:
         echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
         echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
 
-    - name: Get SQL Connection String Output
-      id: sql_output
-      run: |
-        sql_outputs=$(az deployment group show \
-          --resource-group ${{ env.SQL_RESOURCE_GROUP }} \
-          --name "${{ env.SQL_DEPLOYMENT_NAME }}" \
-          --query properties.outputs)
-        connectionString=$(echo $sql_outputs | jq -r '.sqlConnectionString.value')
-        echo "sqlConnectionString=$connectionString" >> $GITHUB_OUTPUT
-
-    - name: Base64 Encode SQL Connection String
-      id: base64_encode
-      run: |
-        echo -n "${{ steps.sql_output.outputs.sqlConnectionString }}" | base64 > encoded.txt
-        encoded=$(cat encoded.txt)
-        echo "sqlConnectionStringBase64=$encoded" >> $GITHUB_OUTPUT
-
     - name: Output Infra Deployment Info
       run: |
         echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
@@ -118,5 +97,3 @@ jobs:
         echo "ACR Name: ${{ steps.outputs.outputs.acrName }}"
         echo "App Gateway Public IP: ${{ steps.outputs.outputs.appGatewayPublicIp }}"
         echo "Web App URL: ${{ steps.outputs.outputs.webAppUrl }}"
-        echo "SQL Connection String: ${{ steps.sql_output.outputs.sqlConnectionString }}"
-        echo "SQL Connection String Base64: ${{ steps.base64_encode.outputs.sqlConnectionStringBase64 }}"

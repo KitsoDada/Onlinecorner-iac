@@ -12,7 +12,7 @@ param sqlAdminUsername string = 'eshopadmin'
 param sqlAdminPassword string
 
 @description('Location for SQL resources (e.g., southafricanorth).')
-param location string = resourceGroup().location
+param location string = 'southafricanorth'
 
 @description('Environment tag (e.g., dev, prod).')
 param environment string = 'dev'
@@ -30,8 +30,8 @@ resource sqlServer 'Microsoft.Sql/servers@2022-05-01-preview' = {
     administratorLoginPassword: sqlAdminPassword
     version: '12.0'
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Disabled' // Enforcing private access
-    restrictOutboundNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Enabled'
+    restrictOutboundNetworkAccess: 'Disabled'
   }
 }
 
@@ -52,9 +52,12 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2022-05-01-preview' = {
   }
 }
 
-// Output secure connection string
-output sqlConnectionString string = 'Server=tcp:${sqlServer.name}.database.windows.net,1433;Initial Catalog=${sqlDatabase.name};Persist Security Info=False;User ID=${sqlAdminUsername};Password=${sqlAdminPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
-
-output sqlServerName string = sqlServer.name
-output sqlDatabaseName string = sqlDatabase.name
-output sqlServerResourceId string = sqlServer.id
+// Allow Azure services to access the SQL Server
+resource firewallRule 'Microsoft.Sql/servers/firewallRules@2022-05-01-preview' = {
+  parent: sqlServer
+  name: 'AllowAzureServices'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
