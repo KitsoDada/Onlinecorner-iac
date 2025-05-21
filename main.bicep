@@ -29,7 +29,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   }
 }
 
-var acrLoginServer = reference(acr.id, '2023-01-01-preview').loginServer
+var acrLoginServer = acr.properties.loginServer
 var linuxFxVersion = 'DOCKER|${acrLoginServer}/${imageName}:${imageTag}'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
@@ -83,7 +83,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2023-04-01' = {
         name: 'appGatewayIpConfig'
         properties: {
           subnet: {
-            id: '${vnet.id}/subnets/${publicSubnetName}'
+            id: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, publicSubnetName)
           }
         }
       }
@@ -186,7 +186,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
         mode: 'System'
         osDiskSizeGB: osDiskSizeGB
         type: 'VirtualMachineScaleSets'
-        vnetSubnetID: '${vnet.id}/subnets/${privateSubnetName}'
+        vnetSubnetID: resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, privateSubnetName)
         enableNodePublicIP: false
         maxPods: 30
       }
@@ -232,10 +232,10 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull Role ID
     principalId: webApp.identity.principalId
   }
-  dependsOn: [
-    webApp
-    acr
-  ]
+  //dependsOn: [
+    //webApp
+   // acr
+ // ]
 }
 
 //
