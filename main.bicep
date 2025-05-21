@@ -11,7 +11,12 @@ param osDiskSizeGB int = 30
 param appGatewayName string = 'online-corner-appgw'
 param appServicePlanName string = 'online-corner-plan'
 param webAppName string = 'online-corner-webapp'
-param linuxFxVersion string = 'DOCKER|kitsoacr.azurecr.io/sample-nodejs:latest'
+
+@description('The name of the container image in ACR, e.g. "sample-nodejs"')
+param imageName string = 'sample-nodejs'
+
+@description('The tag of the container image, e.g. "latest" or "v1.0.0"')
+param imageTag string = 'latest'
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
   name: acrName
@@ -23,6 +28,9 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
     adminUserEnabled: true
   }
 }
+
+var acrLoginServer = reference(acr.id, '2023-01-01-preview').loginServer
+var linuxFxVersion = 'DOCKER|${acrLoginServer}/${imageName}:${imageTag}'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2023-04-01' = {
   name: vnetName
@@ -203,6 +211,9 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
 resource webApp 'Microsoft.Web/sites@2023-01-01' = {
   name: webAppName
   location: location
+  identity: {
+    type: 'SystemAssigned'  // Enable managed identity
+  }
   properties: {
     serverFarmId: appServicePlan.id
     siteConfig: {
@@ -211,6 +222,20 @@ resource webApp 'Microsoft.Web/sites@2023-01-01' = {
     httpsOnly: true
   }
   kind: 'app,linux,container'
+}
+
+// Assign AcrPull role to Web App's managed identity on the ACR
+resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2020-04-01-preview' = {
+  name: guid(webApp.id, 'acrpull-role')
+  scope: acr
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull Role ID
+    principalId: webApp.identity.principalId
+  }
+  dependsOn: [
+    webApp
+    acr
+  ]
 }
 
 //
