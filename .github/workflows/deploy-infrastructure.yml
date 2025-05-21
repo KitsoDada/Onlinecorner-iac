@@ -90,13 +90,6 @@ jobs:
         echo "appGatewayPublicIp=$(echo $outputs | jq -r '.appGatewayPublicIp.value // empty')" >> $GITHUB_OUTPUT
         echo "webAppUrl=$(echo $outputs | jq -r '.webAppUrl.value // empty')" >> $GITHUB_OUTPUT
 
-    - name: Attach ACR to AKS
-      run: |
-        az aks update \
-          --name ${{ steps.outputs.outputs.aksClusterName }} \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --attach-acr ${{ steps.outputs.outputs.acrName }}
-
     - name: Output Infra Deployment Info
       run: |
         echo "AKS Cluster Name: ${{ steps.outputs.outputs.aksClusterName }}"
